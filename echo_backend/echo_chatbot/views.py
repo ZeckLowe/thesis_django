@@ -18,7 +18,7 @@ def ask_question(request):
         return Response({'error': 'Question, user_id, and session_id are required.'}, status=400)
     
     try:
-        answer = Chatbot(question)
+        answer = Chatbot(query=question, user_id=user_id, session_id=session_id)
         return Response({'answer': str(answer)}, status=200)
     except Exception as e:
         return Response({'error': str(e)}, status=500)

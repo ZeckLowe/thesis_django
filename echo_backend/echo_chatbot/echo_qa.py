@@ -91,6 +91,26 @@ def initialize_memory(user_id, session_id):
 
         return memory
 
+# Get Namespaces
+def get_meeting_titles():
+    """
+    Retrieves meeting titles for namespace
+    """
+    meeting_titles = []
+    meetings_ref = db.collection('Meetings')
+
+    try:
+        documents = meetings_ref.stream()
+        for doc in documents:
+            data = doc.to_dict()
+            if 'meetingTitle' in data:
+                meeting_titles.append(data['meetingTitle'])
+        print("Meeting Titles Retrieved:", meeting_titles)
+    except Exception as e:
+        print(f"Error retrieving meeting titles: {str(e)}")
+
+    return meeting_titles
+
 # Prompt Templates
 class prompt_templates:
     def final_rag_template():
@@ -271,13 +291,16 @@ def decomposition_query_process(question, text_answers, memory):
 def CHATBOT(query, user_id, session_id):
     # Initialize memory
     memory = initialize_memory(user_id=user_id, session_id=session_id)
-    
-    namespaces = ["Kickoff Meeting", "Project Meeting"]
+
+    namespaces = get_meeting_titles()
+    if not namespaces:
+        return "no meeting titles found in the database."
+    # namespaces = ["Kickoff Meeting", "Project Meeting"]
 
     query_embeddings = get_embeddings(text=query)
     meeting_title = resolve_namespace(query_embeddings=query_embeddings, namespaces=namespaces)
     text_answers = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title)
-    print(text_answers)
+    print(f"Retrieved context: {text_answers}")
     response = decomposition_query_process(question=query, text_answers=text_answers, memory=memory)
 
     print("User Query:", query)

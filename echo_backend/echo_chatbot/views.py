@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django.http import JsonResponse
 from .chatbot_django_qa import Chatbot
 from .chatbot_django_rps import Pinecone
-import echo_qa
+from .echo_qa import CHATBOT, initialize_conversation_memory
 import json
 
 @api_view(['POST'])

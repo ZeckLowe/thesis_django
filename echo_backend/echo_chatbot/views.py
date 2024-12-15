@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django.http import JsonResponse
 from .chatbot_django_qa import Chatbot
 from .chatbot_django_rps import Pinecone
-from .echo_qa import CHATBOT, initialize_conversation_memory
+from .echo_qa import CHATBOT, FirestoreConversationMemory
 import json
 
 @api_view(['POST'])
@@ -50,7 +50,7 @@ def initialize_conversation_memory(request):
             session_id = data["session_id"]
             messages = data["messages"]
 
-            memory = echo_qa.FirestoreConversationMemory(user_id=user_id, session_id=session_id)
+            memory = FirestoreConversationMemory(user_id=user_id, session_id=session_id)
 
             for message in messages:
                 role = message.get("role")

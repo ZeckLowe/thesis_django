@@ -9,9 +9,18 @@ from langchain_core.output_parsers import StrOutputParser
 from sklearn.metrics.pairwise import cosine_similarity
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationChain
-from google.cloud import firestore
+import firebase_admin
+import google.cloud
+from firebase_admin import credentials, firestore
+
 
 # Firestore Initialization
+credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
+
+cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+firebase_admin.initialize_app(cred)
+
 db = firestore.Client()
 
 # API Keys Initialization
@@ -36,18 +45,6 @@ class FirestoreConversationMemory(ConversationBufferMemory):
         super().__init__(*args, **kwargs)
         self.user_id = user_id
         self.session_id = session_id
-
-    def save_to_firestore(self, message):
-        """
-        Saves the current conversation buffer to Firestore
-        """
-        doc_ref = db.collection('chatHistory').document(self.user_id).collection(self.session_id)
-        for i in message in enumerate(self.chat_memory.messages):
-            doc_ref.document(f"message_{i}").set({
-                "role": message.role,
-                "content": message.context,
-                "timestamp": message.created_at.isoformat() if hasattr(message, 'created_at') else None
-            })
 
     def add_message(self, role, content):
         """

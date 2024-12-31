@@ -4,7 +4,6 @@ from langchain_openai import ChatOpenAI
 import hashlib
 from pinecone import Pinecone
 from langchain_openai import OpenAI
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from sklearn.metrics.pairwise import cosine_similarity
 from langchain.memory import ConversationBufferMemory
@@ -12,6 +11,7 @@ from langchain.chains import ConversationChain
 import firebase_admin
 import google.cloud
 from firebase_admin import credentials, firestore
+import prompt_templates
 
 
 # Firestore Initialization
@@ -55,47 +55,6 @@ def get_meeting_titles():
         print(f"Error retrieving meeting titles: {str(e)}")
 
     return meeting_titles
-
-# Prompt Templates
-class prompt_templates:
-    def final_rag_template():
-        prompt = """
-            You are a meeting facilitator.
-            This user will ask you a questions about the conversation of the meeting.
-            Use following piece of context to answer the question.
-            If you don't know the answer, just say you don't know.
-            Keep the answer complete and concise.
-            Context: {context}
-            Here are some background questions and answers that will help you answer the question: {qa_pairs}
-            Question: {question}
-        """
-        
-        return ChatPromptTemplate.from_template(prompt)
-    
-    def decomposition_template():
-        prompt = """
-            Break the following user question into smaller, more specific questions.
-            Provide these subquestions separated by newlines. 
-            Do not rephrase if you see unknown terms.
-            Question: {question}
-            subquestions:
-        """
-
-        return ChatPromptTemplate.from_template(prompt)
-    
-    def qa_template():
-        prompt = """
-            Answer the question in the following context:\n{context}\n\nQuestion: {subquestion}
-        """
-
-        return ChatPromptTemplate.from_template(prompt)
-    
-    def conversation_history_template():
-        prompt = """
-            Conversation History: {memory}\nUser Query: {query}\nResponse: {initial_response}\nRefined Answer:
-        """
-
-        return ChatPromptTemplate.from_template(prompt)
 
 # Get Embeddings
 def get_embeddings(text):

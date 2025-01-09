@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 import hashlib
 from pinecone import Pinecone
 from langchain_openai import OpenAI
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from sklearn.metrics.pairwise import cosine_similarity
 from langchain.memory import ConversationBufferMemory
@@ -11,7 +12,8 @@ from langchain.chains import ConversationChain
 import firebase_admin
 import google.cloud
 from firebase_admin import credentials, firestore
-import prompt_templates
+from .prompt_templates import prompt_templates
+from langchain_core.prompts import MessagesPlaceholder
 
 
 # Firestore Initialization
@@ -136,12 +138,12 @@ def query_pinecone_index(query_embeddings, meeting_title, index, top_k=5, includ
         filter=filter_conditions,
         top_k=top_k,
         include_metadata=include_metadata,
-        namespace=meeting_title) # Filter based on metadata
+        namespace="meeting_title") # Filter based on metadata
 
     print("Querying Pinecone Index: Done!")
     return " ".join([doc['metadata']['text'] for doc in query_response['matches']])
 
-def decomposition_query_process(question, text_answers):
+def decomposition_query_process(question, text_answers, chat_history):
     """Implements decomposition query"""
 
     def output_parser(output):
@@ -178,7 +180,8 @@ def decomposition_query_process(question, text_answers):
     def build_final_answer(question, context, qa_pairs):
         """Builds a final answer by integrating the context and QA pairs."""
         qa_pairs_str = "\n".join([f"Q: {q}\nA: {a}" for q, a in qa_pairs])
-        final_prompt = prompt_templates.final_rag_template().format(context=context, qa_pairs=qa_pairs_str, question=question)
+        # final_prompt = prompt_templates.final_rag_template().format(context=context, qa_pairs=qa_pairs_str, question=question)
+        final_prompt = prompt_templates.final_rag_template_with_memory().format(context=context, qa_pairs=qa_pairs_str, question=question, chat_history=chat_history)
         final_response = LLM.invoke(final_prompt)
         print("Building Final Answer: Done!")
 
@@ -191,12 +194,61 @@ def decomposition_query_process(question, text_answers):
 
     return output_parser(final_answer)
 
+def initialize_chat_history(user_id, session_id):
+    """
+    Initializes a chat history object.
+    """
+    chat_history = []
+    doc_ref = db.collection("chatHistory").document(user_id).collection("session").document(session_id)
+    doc_snapshot = doc_ref.get()
+    try:
+        if doc_snapshot.exists:
+            messages = doc_snapshot.get('messages')
+
+            for idx, message in enumerate(messages):
+                chat_history.append(message)
+            print(f"Chat History Initialized: {chat_history}")
+        else:
+            chat_history = []
+    except Exception as e:
+        print(f"Error initializing chat history: {str(e)}")
+    
+    return chat_history
+
+def update_chat_history(user_id, session_id, chat_history):
+    """
+    Updates the chat history object.
+    """
+    doc_ref = db.collection("chatHistory").document(user_id).collection("session").document(session_id)
+    try:
+        doc_ref.update({
+            'messages': chat_history
+        })
+    except Exception as e:
+        print(f"Error updating chat history: {str(e)}")
+
+def process_chat_history(chat_history):
+    """
+    Changes the chat history list into a HumanMessages and AIMessages Schema
+    """
+    process_chat_history = []
+    for idx, message in enumerate(chat_history):
+        if idx % 2 == 0:
+            process_chat_history.append(HumanMessage(message))
+        else:
+            process_chat_history.append(AIMessage(message))
+
+        
+    return process_chat_history
+
 def CHATBOT(query, user_id, session_id, organization):
     print(f"Question: {query}")
     print(f"Current User ID: {user_id}")
     print(f"Current Session ID: {session_id}")
     print(f"Organization: {organization}")
     index = pc.Index(organization.lower())
+
+    chat_history = initialize_chat_history(user_id, session_id)
 
     # namespaces = get_meeting_titles()
     # if not namespaces:
@@ -207,7 +259,14 @@ def CHATBOT(query, user_id, session_id, organization):
     meeting_title = resolve_namespace(query_embeddings=query_embeddings, namespaces=namespaces)
     text_answers = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title, index=index)
     print(f"Retrieved context: {text_answers}")
-    response = decomposition_query_process(question=query, text_answers=text_answers)
+
+    # chat_history 
+
+    response = decomposition_query_process(question=query, text_answers=text_answers, chat_history=process_chat_history(chat_history))
+
+    chat_history.append(query)
+    chat_history.append(response)
+    update_chat_history(user_id, session_id, chat_history)
 
     print("User Query:", query)
     print("Chatbot Response:", response)

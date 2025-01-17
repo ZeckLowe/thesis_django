@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from .chatbot_django_qa import Chatbot
 from .chatbot_django_rps import Pinecone
 from .echo_qa import CHATBOT
+from .echo_rps import PINECONE
 import json
 
 @api_view(['POST'])
@@ -27,15 +28,18 @@ def ask_question(request):
 @api_view(['POST'])
 def store_transcript(request):
     transcript = request.data.get('transcript')
-    meeting_title = 'Sample Meeting Title'
+    meeting_title = request.data.get('meeting_title')
+    organization = request.data.get('organization')
 
     if not transcript:
         return Response({'error': 'No transcript provided'}, status=400)
     if not meeting_title:
         return Response({'error': 'No meeting title provided'}, status=400)
+    if not organization:
+        return Response({'error': 'No organization provided'}, status=400)
     
     try:
-        Pinecone(transcript, meeting_title)
+        Pinecone(transcript, meeting_title, organization)
     except Exception as e:
         return Response({'error': str(e)}, status=500)
     

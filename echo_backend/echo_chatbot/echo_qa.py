@@ -138,7 +138,7 @@ def query_pinecone_index(query_embeddings, meeting_title, index, top_k=5, includ
         filter=filter_conditions,
         top_k=top_k,
         include_metadata=include_metadata,
-        namespace="meeting_title") # Filter based on metadata
+        namespace=meeting_title )
 
     print("Querying Pinecone Index: Done!")
     return " ".join([doc['metadata']['text'] for doc in query_response['matches']])
@@ -205,7 +205,7 @@ def initialize_chat_history(user_id, session_id):
         if doc_snapshot.exists:
             messages = doc_snapshot.get('messages')
 
-            for idx, message in enumerate(messages):
+            for message in enumerate(messages):
                 chat_history.append(message)
             print(f"Chat History Initialized: {chat_history}")
         else:

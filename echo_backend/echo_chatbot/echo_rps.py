@@ -196,7 +196,7 @@ def store_summary_to_firestore(summary, organization, meeting_title):
             return
         
         doc_ref.update({
-                'summary': summary_text,  # Store the summary text
+                'meetingSummary': summary_text,  # Store the summary text
             })
         print(f"Updated document: {meeting_title} with summary and embeddings.")
 

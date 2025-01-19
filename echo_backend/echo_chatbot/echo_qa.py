@@ -12,8 +12,9 @@ from langchain.chains import ConversationChain
 import firebase_admin
 import google.cloud
 from firebase_admin import credentials, firestore
-from prompt_templates import prompt_templates
+from .prompt_templates import prompt_templates
 from langchain_core.prompts import MessagesPlaceholder
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 
 # Firestore Initialization
@@ -24,19 +25,37 @@ if not firebase_admin._apps:
     cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
     firebase_admin.initialize_app(cred)
 
-db = firestore.Client()
+try:
+    db = firestore.Client()
+    print("*Firestore connected successfully!")
+except Exception as e:
+    print(f"Failed to connect to Firestore: {e}")
 
 # API Keys Initialization
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 
+if not OPENAI_API_KEY:
+    print("OpenAI API Key not found!")
+if not PINECONE_API_KEY:
+    print("Pinecone API Key not found!")
+
 # Pinecone Initialization
-pc = Pinecone(api_key=PINECONE_API_KEY)
+try:
+    pc = Pinecone(api_key=PINECONE_API_KEY)
+    print("*Pinecone connected successfully!")
+except Exception as e:
+    print(f"Failed to connect to Pinecone: {e}")
+
 
 # OpenAI Initialization
-client=OpenAI(api_key=OPENAI_API_KEY)
-LLM = ChatOpenAI(temperature=0, model_name="gpt-4-turbo")
-EMBEDDINGS = OpenAIEmbeddings(model='text-embedding-3-small')
+try:
+    client=OpenAI(api_key=OPENAI_API_KEY)
+    LLM = ChatOpenAI(temperature=0, model_name="gpt-4-turbo")
+    EMBEDDINGS = OpenAIEmbeddings(model='text-embedding-3-small')
+    print("*OpenAI connected successfully!")
+except Exception as e:
+    print(f"Failed to connect to OpenAI: {e}")
 
 # Get Namespaces
 def get_meeting_titles():
@@ -128,20 +147,20 @@ def resolve_namespace(query_embeddings, organization):
         """
         Fetches summaries by organization
         """
-        meetings = {}
-        meetings_ref = db.collection('Meetings')
-        query = meetings_ref.where('organization', '==', organization)
+        summaries = {}
+        meetings_ref = db.collection("Meetings")
+        query = meetings_ref.where(filter=FieldFilter("organization", "==", organization))
         docs = query.stream()
 
         for doc in docs:
             data = doc.to_dict()
             meeting_title = data.get("meetingTitle")
-            summary = data.get("summary")
+            summary = data.get("meetingSummary")
             if meeting_title and summary:
-                meetings[meeting_title] = summary
+                summaries[meeting_title] = summary
         
-        print(f"Fetched summaries for organization '{organization}': {meetings}")
-        return meetings
+        print(f"Fetched summaries for organization '{organization}': {summaries}")
+        return summaries
 
     def get_most_similar_namespace(query_embeddings, summaries):
         """
@@ -255,12 +274,16 @@ def initialize_chat_history(user_id, session_id):
     try:
         if doc_snapshot.exists:
             messages = doc_snapshot.get('messages')
+            if messages is None:
+                print(f"No 'messages' field found in document for user_id={user_id}, session_id={session_id}")
+                return chat_history
+            messages = doc_snapshot.get('messages')
 
-            for message in enumerate(messages):
+            for message in messages:
                 chat_history.append(message)
             print(f"Chat History Initialized: {chat_history}")
         else:
-            chat_history = []
+            print(f"No document found for user_id={user_id}, session_id={session_id}")
     except Exception as e:
         print(f"Error initializing chat history: {str(e)}")
     
@@ -299,15 +322,14 @@ def CHATBOT(query, user_id, session_id, organization):
     print(f"Organization: {organization}")
     index = pc.Index(organization.lower())
 
-    chat_history = initialize_chat_history(user_id, session_id)
-
+    chat_history = initialize_chat_history(user_id=user_id, session_id=session_id)
     # namespaces = get_meeting_titles()
     # if not namespaces:
     #     return print("no meeting titles found in the database.")
     namespaces = ["Kickoff Meeting", "Project Meeting"]
 
     query_embeddings = get_embeddings(text=query)
-    meeting_title = resolve_namespace(query_embeddings=query_embeddings, namespaces=namespaces)
+    meeting_title = resolve_namespace(query_embeddings=query_embeddings, organization=organization)
     text_answers = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title, index=index)
     print(f"Retrieved context: {text_answers}")
 
@@ -324,4 +346,4 @@ def CHATBOT(query, user_id, session_id, organization):
 
     return response
 
-CHATBOT(query="What is the project about?", user_id="qN3L5d7p5VZIHiHvDYy2o8b7ihX2", session_id="4", organization="SCS")
+# CHATBOT(query="What is the project about?", user_id="qN3L5d7p5VZIHiHvDYy2o8b7ihX2", session_id="4", organization="SCS")

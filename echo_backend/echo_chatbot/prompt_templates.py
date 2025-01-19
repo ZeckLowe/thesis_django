@@ -50,7 +50,7 @@ class prompt_templates:
     def summary_template():
         prompt = """
             You are a summarization assistant. Generate a concise summary of the following text. Do not include label.
-            Incorporate the following details into your summary: {texts}, {date}, {meeting_title}
+            Incorporate the following details into your summary: Transcript:{texts}, Date of the Meeting:{date}, Meeting Title:{meeting_title}
         """
 
         return ChatPromptTemplate.from_template(prompt)

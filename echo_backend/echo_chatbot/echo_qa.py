@@ -14,6 +14,7 @@ import google.cloud
 from firebase_admin import credentials, firestore
 from .prompt_templates import prompt_templates
 from langchain_core.prompts import MessagesPlaceholder
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 
 # Firestore Initialization
@@ -24,19 +25,37 @@ if not firebase_admin._apps:
     cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
     firebase_admin.initialize_app(cred)
 
-db = firestore.Client()
+try:
+    db = firestore.Client()
+    print("*Firestore connected successfully!")
+except Exception as e:
+    print(f"Failed to connect to Firestore: {e}")
 
 # API Keys Initialization
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 
+if not OPENAI_API_KEY:
+    print("OpenAI API Key not found!")
+if not PINECONE_API_KEY:
+    print("Pinecone API Key not found!")
+
 # Pinecone Initialization
-pc = Pinecone(api_key=PINECONE_API_KEY)
+try:
+    pc = Pinecone(api_key=PINECONE_API_KEY)
+    print("*Pinecone connected successfully!")
+except Exception as e:
+    print(f"Failed to connect to Pinecone: {e}")
+
 
 # OpenAI Initialization
-client=OpenAI(api_key=OPENAI_API_KEY)
-LLM = ChatOpenAI(temperature=0, model_name="gpt-4-turbo")
-EMBEDDINGS = OpenAIEmbeddings(model='text-embedding-3-small')
+try:
+    client=OpenAI(api_key=OPENAI_API_KEY)
+    LLM = ChatOpenAI(temperature=0, model_name="gpt-4-turbo")
+    EMBEDDINGS = OpenAIEmbeddings(model='text-embedding-3-small')
+    print("*OpenAI connected successfully!")
+except Exception as e:
+    print(f"Failed to connect to OpenAI: {e}")
 
 # Get Namespaces
 def get_meeting_titles():
@@ -67,58 +86,109 @@ def get_embeddings(text):
     print("Generating Embeddings: Done!")
     return text_embeddings
 
-# Get Namespace
-def resolve_namespace(query_embeddings, namespaces) -> str:
+# # Get Namespace
+# def resolve_namespace(query_embeddings, namespaces) -> str:
+#     """
+#     Resolves the namespace by either selecting the most similar one or prompting the user for clarification.
+#     """
+#     def get_most_similar_namespace(query_embeddings, namespaces, threshold=0.05):
+#         """
+#         Rank namespaces by semantic similarity to the query.
+#         """
+#         # Get embeddings for each namespace in list
+#         namespace_embeddings = {ns: get_embeddings(ns) for ns in namespaces}
+#         print(namespace_embeddings)
+
+#         # Compute similarities
+#         similarities = {
+#             ns: cosine_similarity([query_embeddings], [embedding])[0][0] for ns, embedding in namespace_embeddings.items()
+#         }
+#         print(similarities.items)
+
+#         # Rank namespaes by similarity score
+#         ranked_namespaces = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
+#         print(ranked_namespaces)
+
+#         # Check if the top two are close in similarity
+#         top_two = ranked_namespaces[:2]
+#         print(top_two)
+#         if len(top_two) > 1 and abs(top_two[0][1] - top_two[1][1]) < threshold:
+#             return None, top_two # Ambiguous case, return for user clarification
+        
+#         return ranked_namespaces[0][0], ranked_namespaces
+
+#     def clarify_with_user(ambiguous_namespaces: list[tuple]) -> str:
+#         """
+#         Ask the user to clarify when multiple namespaces are similar.
+#         """
+#         options = [ns[0] for ns in ambiguous_namespaces]
+#         print(options)
+#         print(f"Did you mean:\n1. {options[0]}\n2. {options[1]}")
+
+#         # Simulate user input for demonstration
+#         user_choice = int(input("Please choose 1 or 2: "))-1
+#         return options[user_choice]
+
+#     namespace, ranked = get_most_similar_namespace(query_embeddings, namespaces)
+#     print(namespaces, ranked)
+
+#     if namespace:
+#         print(f"Selected namespace: {namespace}")
+#         return namespace
+#     else:
+#         print("Ambiguity detected!")
+#         return clarify_with_user(ranked)
+
+def resolve_namespace(query_embeddings, organization):
     """
-    Resolves the namespace by either selecting the most similar one or prompting the user for clarification.
+    Resolves the namespace by either selecting the most similar one
     """
-    def get_most_similar_namespace(query_embeddings, namespaces, threshold=0.05):
+    def fetch_summaries_by_organization(organization):
+        """
+        Fetches summaries by organization
+        """
+        summaries = {}
+        meetings_ref = db.collection("Meetings")
+        query = meetings_ref.where(filter=FieldFilter("organization", "==", organization))
+        docs = query.stream()
+
+        for doc in docs:
+            data = doc.to_dict()
+            meeting_title = data.get("meetingTitle")
+            summary = data.get("meetingSummary")
+            if meeting_title and summary:
+                summaries[meeting_title] = summary
+        
+        print(f"Fetched summaries for organization '{organization}': {summaries}")
+        return summaries
+
+    def get_most_similar_namespace(query_embeddings, summaries):
         """
         Rank namespaces by semantic similarity to the query.
         """
-        # Get embeddings for each namespace in list
-        namespace_embeddings = {ns: get_embeddings(ns) for ns in namespaces}
-        print(namespace_embeddings)
+        summary_embeddings = {title: get_embeddings(summary) for title, summary in summaries.items()}
+        print("Generated summary embeddings:", summary_embeddings)
 
-        # Compute similarities
         similarities = {
-            ns: cosine_similarity([query_embeddings], [embedding])[0][0] for ns, embedding in namespace_embeddings.items()
+            title: cosine_similarity([query_embeddings], [embedding])[0][0] for title, embedding in summary_embeddings.items()
         }
-        print(similarities.items)
 
-        # Rank namespaes by similarity score
+        print("Computed similarities:", similarities)
+
         ranked_namespaces = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
-        print(ranked_namespaces)
+        print("Ranked namespaces:", ranked_namespaces)
 
-        # Check if the top two are close in similarity
-        top_two = ranked_namespaces[:2]
-        print(top_two)
-        if len(top_two) > 1 and abs(top_two[0][1] - top_two[1][1]) < threshold:
-            return None, top_two # Ambiguous case, return for user clarification
+        # top_two = ranked_namespaces[:2]
+        # if len(top_two) > 1 and abs(top_two[0][1] - top_two[1][1]) < threshold:
+        #     return None, top_two # Ambiguous case, return for user clarification
         
-        return ranked_namespaces[0][0], ranked_namespaces
+        return ranked_namespaces[0][0]
+    
+    summaries = fetch_summaries_by_organization(organization)
 
-    def clarify_with_user(ambiguous_namespaces: list[tuple]) -> str:
-        """
-        Ask the user to clarify when multiple namespaces are similar.
-        """
-        options = [ns[0] for ns in ambiguous_namespaces]
-        print(options)
-        print(f"Did you mean:\n1. {options[0]}\n2. {options[1]}")
-
-        # Simulate user input for demonstration
-        user_choice = int(input("Please choose 1 or 2: "))-1
-        return options[user_choice]
-
-    namespace, ranked = get_most_similar_namespace(query_embeddings, namespaces)
-    print(namespaces, ranked)
-
-    if namespace:
-        print(f"Selected namespace: {namespace}")
-        return namespace
-    else:
-        print("Ambiguity detected!")
-        return clarify_with_user(ranked)
+    namespace = get_most_similar_namespace(query_embeddings, summaries)
+    print(f"Selected namespace: {namespace}")
+    return namespace
 
 # Get Relevant Documents
 def query_pinecone_index(query_embeddings, meeting_title, index, top_k=5, include_metadata=True):
@@ -204,12 +274,16 @@ def initialize_chat_history(user_id, session_id):
     try:
         if doc_snapshot.exists:
             messages = doc_snapshot.get('messages')
+            if messages is None:
+                print(f"No 'messages' field found in document for user_id={user_id}, session_id={session_id}")
+                return chat_history
+            messages = doc_snapshot.get('messages')
 
-            for message in enumerate(messages):
+            for message in messages:
                 chat_history.append(message)
             print(f"Chat History Initialized: {chat_history}")
         else:
-            chat_history = []
+            print(f"No document found for user_id={user_id}, session_id={session_id}")
     except Exception as e:
         print(f"Error initializing chat history: {str(e)}")
     
@@ -248,15 +322,14 @@ def CHATBOT(query, user_id, session_id, organization):
     print(f"Organization: {organization}")
     index = pc.Index(organization.lower())
 
-    chat_history = initialize_chat_history(user_id, session_id)
-
+    chat_history = initialize_chat_history(user_id=user_id, session_id=session_id)
     # namespaces = get_meeting_titles()
     # if not namespaces:
     #     return print("no meeting titles found in the database.")
     namespaces = ["Kickoff Meeting", "Project Meeting"]
 
     query_embeddings = get_embeddings(text=query)
-    meeting_title = resolve_namespace(query_embeddings=query_embeddings, namespaces=namespaces)
+    meeting_title = resolve_namespace(query_embeddings=query_embeddings, organization=organization)
     text_answers = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title, index=index)
     print(f"Retrieved context: {text_answers}")
 
@@ -272,3 +345,5 @@ def CHATBOT(query, user_id, session_id, organization):
     print("Chatbot Response:", response)
 
     return response
+
+# CHATBOT(query="What is the project about?", user_id="qN3L5d7p5VZIHiHvDYy2o8b7ihX2", session_id="4", organization="SCS")

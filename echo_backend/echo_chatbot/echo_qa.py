@@ -57,26 +57,6 @@ try:
 except Exception as e:
     print(f"Failed to connect to OpenAI: {e}")
 
-# Get Namespaces
-def get_meeting_titles():
-    """
-    Retrieves meeting titles for namespace
-    """
-    meeting_titles = []
-    meetings_ref = db.collection('Meetings')
-
-    try:
-        documents = meetings_ref.stream()
-        for doc in documents:
-            data = doc.to_dict()
-            if 'meetingTitle' in data:
-                meeting_titles.append(data['meetingTitle'])
-        print("Meeting Titles Retrieved:", meeting_titles)
-    except Exception as e:
-        print(f"Error retrieving meeting titles: {str(e)}")
-
-    return meeting_titles
-
 # Get Embeddings
 def get_embeddings(text):
     """
@@ -85,59 +65,6 @@ def get_embeddings(text):
     text_embeddings = EMBEDDINGS.embed_query(text)
     print("Generating Embeddings: Done!")
     return text_embeddings
-
-# # Get Namespace
-# def resolve_namespace(query_embeddings, namespaces) -> str:
-#     """
-#     Resolves the namespace by either selecting the most similar one or prompting the user for clarification.
-#     """
-#     def get_most_similar_namespace(query_embeddings, namespaces, threshold=0.05):
-#         """
-#         Rank namespaces by semantic similarity to the query.
-#         """
-#         # Get embeddings for each namespace in list
-#         namespace_embeddings = {ns: get_embeddings(ns) for ns in namespaces}
-#         print(namespace_embeddings)
-
-#         # Compute similarities
-#         similarities = {
-#             ns: cosine_similarity([query_embeddings], [embedding])[0][0] for ns, embedding in namespace_embeddings.items()
-#         }
-#         print(similarities.items)
-
-#         # Rank namespaes by similarity score
-#         ranked_namespaces = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
-#         print(ranked_namespaces)
-
-#         # Check if the top two are close in similarity
-#         top_two = ranked_namespaces[:2]
-#         print(top_two)
-#         if len(top_two) > 1 and abs(top_two[0][1] - top_two[1][1]) < threshold:
-#             return None, top_two # Ambiguous case, return for user clarification
-        
-#         return ranked_namespaces[0][0], ranked_namespaces
-
-#     def clarify_with_user(ambiguous_namespaces: list[tuple]) -> str:
-#         """
-#         Ask the user to clarify when multiple namespaces are similar.
-#         """
-#         options = [ns[0] for ns in ambiguous_namespaces]
-#         print(options)
-#         print(f"Did you mean:\n1. {options[0]}\n2. {options[1]}")
-
-#         # Simulate user input for demonstration
-#         user_choice = int(input("Please choose 1 or 2: "))-1
-#         return options[user_choice]
-
-#     namespace, ranked = get_most_similar_namespace(query_embeddings, namespaces)
-#     print(namespaces, ranked)
-
-#     if namespace:
-#         print(f"Selected namespace: {namespace}")
-#         return namespace
-#     else:
-#         print("Ambiguity detected!")
-#         return clarify_with_user(ranked)
 
 def resolve_namespace(query_embeddings, organization):
     """
@@ -177,10 +104,6 @@ def resolve_namespace(query_embeddings, organization):
 
         ranked_namespaces = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
         print("Ranked namespaces:", ranked_namespaces)
-
-        # top_two = ranked_namespaces[:2]
-        # if len(top_two) > 1 and abs(top_two[0][1] - top_two[1][1]) < threshold:
-        #     return None, top_two # Ambiguous case, return for user clarification
         
         return ranked_namespaces[0][0]
     

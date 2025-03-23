@@ -8,7 +8,8 @@ class prompt_templates:
             This user will ask you a questions about the conversation of the meeting.
             Use the  context to answer the question.
             If you don't know the answer, just say you don't know.
-            Keep the answer complete and concise.
+            Keep the answer complete and concise, and make it a paragraph.
+            Don't use any '*' in your answer.
             Context: {context}
             Here are some background questions and answers that will help you find answers from the context: {qa_pairs}
             Question: {question}
@@ -31,7 +32,7 @@ class prompt_templates:
     def decomposition_template():
         prompt = """
             Below is the conversation context followed by the user's question.
-            Use the context to help decompose the question into smaller, more specific subquestions.
+            Use the context to help decompose the question into smaller, more specific subquestions at most 3.
             If you see unknown terms, do not rephrase them.
         
             Question: {question}

@@ -51,7 +51,7 @@ except Exception as e:
 # OpenAI Initialization
 try:
     client=OpenAI(api_key=OPENAI_API_KEY)
-    LLM = ChatOpenAI(temperature=0, model_name="gpt-4-turbo")
+    LLM = ChatOpenAI(temperature=0, model_name="gpt-4o-mini")
     EMBEDDINGS = OpenAIEmbeddings(model='text-embedding-3-small')
     print("*OpenAI connected successfully!")
 except Exception as e:

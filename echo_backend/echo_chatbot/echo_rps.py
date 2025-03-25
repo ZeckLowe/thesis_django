@@ -12,11 +12,11 @@ import firebase_admin
 
 
 # Firestore Initialization
-credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
     firebase_admin.initialize_app(cred)
 
 db = firestore.Client()
@@ -208,7 +208,7 @@ def store_summary_to_firestore(summary, organization, meeting_title):
 
 def PINECONE(texts, meeting_title, organization):
     today = str(date.today()) # INITIALIZATION FOR DATE (DYNAMIC) BASED ON STORING
-    index = check_index(organization.lower())
+    index = check_index(organization.lower().replace(" ","-"))
     namespace = meeting_title
 
     chunked_text = chunk_text_recursive(text=texts)

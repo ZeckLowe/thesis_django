@@ -135,6 +135,12 @@ def generate_short_id(content):
 def combine_vector_and_text(texts, meeting_title, text_embeddings):
     """
     Process a list of texts along with their embeddings.
+
+    Parameters:
+    - texts (List[str]): List of chunked text
+    - meeting_title (str): Title of the meeting
+    - text_embeddings (List[List[float]]): Vector embeddings of the corresponding texts
+    Output: List
     """
     # Date Today
     today = str(date.today())

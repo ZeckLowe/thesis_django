@@ -134,9 +134,9 @@ def query_pinecone_index(query_embeddings, meeting_title, index, top_k=5, includ
         namespace=meeting_title )
 
     print("Querying Pinecone Index: Done!")
-    return " ".join([doc['metadata']['text'] for doc in query_response['matches']])
+    return " ".join([doc['metadata']['text'] for doc in query_response['matches']]), [doc['metadata']['date'] for doc in query_response['matches']], [doc['metadata']['title'] for doc in query_response['matches']]
 
-def decomposition_query_process(question, text_answers, chat_history):
+def decomposition_query_process(question, text_answers, chat_history, text_date, text_title):
     """Implements decomposition query"""
 
     def output_parser(output):
@@ -146,7 +146,7 @@ def decomposition_query_process(question, text_answers, chat_history):
         print("\n" + output.content + "\n")
 
         return output.content
-
+    
     def decompose_question(question):
         """
         Decomposes a complex question into smaller questions.
@@ -170,11 +170,11 @@ def decomposition_query_process(question, text_answers, chat_history):
 
         return qa_pairs
     
-    def build_final_answer(question, context, qa_pairs):
+    def build_final_answer(question, context, qa_pairs, text_date, text_title):
         """Builds a final answer by integrating the context and QA pairs."""
         qa_pairs_str = "\n".join([f"Q: {q}\nA: {a}" for q, a in qa_pairs])
         # final_prompt = prompt_templates.final_rag_template().format(context=context, qa_pairs=qa_pairs_str, question=question)
-        final_prompt = prompt_templates.final_rag_template_with_memory().format(context=context, qa_pairs=qa_pairs_str, question=question, chat_history=chat_history)
+        final_prompt = prompt_templates.final_rag_template_with_memory().format(context=context, qa_pairs=qa_pairs_str, question=question, chat_history=chat_history, text_date=text_date, text_title=text_title)
         final_response = LLM.invoke(final_prompt)
         print("Building Final Answer: Done!")
 
@@ -183,7 +183,7 @@ def decomposition_query_process(question, text_answers, chat_history):
     subquestions = decompose_question(question)
     qa_pairs = generate_qa_pairs(subquestions, text_answers)
     print(qa_pairs)
-    final_answer = build_final_answer(question, text_answers, qa_pairs)
+    final_answer = build_final_answer(question, text_answers, qa_pairs, text_date, text_title)
 
     return output_parser(final_answer)
 
@@ -253,12 +253,12 @@ def CHATBOT(query, user_id, session_id, organization):
 
     query_embeddings = get_embeddings(text=query)
     meeting_title = resolve_namespace(query_embeddings=query_embeddings, organization=organization)
-    text_answers = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title, index=index)
-    print(f"Retrieved context: {text_answers}")
+    text_answers, text_date, text_title = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title, index=index)
+    print(f"Retrieved context: {text_answers}\nDate context: {text_date}\nTitle Context: {text_title}")
 
     # chat_history 
 
-    response = decomposition_query_process(question=query, text_answers=text_answers, chat_history=process_chat_history(chat_history))
+    response = decomposition_query_process(question=query, text_answers=text_answers, chat_history=process_chat_history(chat_history), text_date=text_date, text_title=text_title)
 
     chat_history.append(query)
     chat_history.append(response)

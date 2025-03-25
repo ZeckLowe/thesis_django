@@ -19,7 +19,7 @@ class prompt_templates:
     def final_rag_template_with_memory():
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", "You are a meeting facilitator. This user will ask you a questions about the conversation of the meeting. Use the  context to answer the question. If you don't know the answer, just say you don't know. ALWAYS refer your answer to the context and keep the answer complete and concise. Don't use any font effect. Context: {context}"),
+                ("system", "You are a meeting facilitator. This user will ask you a questions about the conversation of the meeting. Use the  context to answer the question. If you don't know the answer, just say you don't know. ALWAYS refer your answer to the context and keep the answer complete and concise. Don't use any font effect. Context: {context}, Meeting date: {text_date}, Meeting Title: {text_title}"),
                 ("system", "Here are some background questions and answers that will help you find answers from the context: {qa_pairs}"),
                 MessagesPlaceholder(variable_name="chat_history"),
                 ("human", "{question}"),
@@ -31,7 +31,7 @@ class prompt_templates:
     def decomposition_template():
         prompt = """
             Below is the conversation context followed by the user's question.
-            Use the context to help decompose the question into smaller, more specific subquestions.
+            Use the context to help decompose the question into not more than three smaller, more specific subquestions.
             If you see unknown terms, do not rephrase them.
         
             Question: {question}

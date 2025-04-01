@@ -5,24 +5,22 @@ import hashlib
 from pinecone import Pinecone
 from langchain_openai import OpenAI
 from langchain_core.messages import HumanMessage, AIMessage
-from langchain_core.output_parsers import StrOutputParser
 from sklearn.metrics.pairwise import cosine_similarity
-from langchain.memory import ConversationBufferMemory
-from langchain.chains import ConversationChain
 import firebase_admin
 import google.cloud
 from firebase_admin import credentials, firestore
 from .prompt_templates import prompt_templates
-from langchain_core.prompts import MessagesPlaceholder
 from google.cloud.firestore_v1.base_query import FieldFilter
-
+from sentence_transformers import CrossEncoder
 
 # Firestore Initialization
-credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+# credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    # cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
     firebase_admin.initialize_app(cred)
 
 try:
@@ -57,6 +55,13 @@ try:
 except Exception as e:
     print(f"Failed to connect to OpenAI: {e}")
 
+# CrossEncoder Initialization
+try:
+    reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L6-v2")
+    print("*CrossEncoder connected successfully!")
+except Exception as e:
+    print(f"Failed to connect to CrossEncoder: {e}")
+
 # Get Embeddings
 def get_embeddings(text):
     """
@@ -66,7 +71,7 @@ def get_embeddings(text):
     print("Generating Embeddings: Done!")
     return text_embeddings
 
-def resolve_namespace(query_embeddings, organization):
+def resolve_namespace(query_embeddings, organization, query):
     """
     Resolves the namespace by either selecting the most similar one
     """
@@ -89,7 +94,7 @@ def resolve_namespace(query_embeddings, organization):
         print(f"Fetched summaries for organization '{organization}': {summaries}")
         return summaries
 
-    def get_most_similar_namespace(query_embeddings, summaries):
+    def get_most_similar_namespace(query_embeddings, summaries, query):
         """
         Rank namespaces by semantic similarity to the query.
         """
@@ -99,17 +104,22 @@ def resolve_namespace(query_embeddings, organization):
         similarities = {
             title: cosine_similarity([query_embeddings], [embedding])[0][0] for title, embedding in summary_embeddings.items()
         }
-
         print("Computed similarities:", similarities)
 
-        ranked_namespaces = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
-        print("Ranked namespaces:", ranked_namespaces)
+        ranked_candidates = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
+        print("\n >Initial Ranking (Cosine Similarity):", ranked_candidates)
+
+        cross_encoder_inputs = [(summaries[title], query) for title, _ in ranked_candidates]
+
+        scores = reranker.predict(cross_encoder_inputs)
+
+        reranked_candidates = sorted(zip(ranked_candidates, scores), key=lambda x: x[1], reverse=True)
         
-        return ranked_namespaces[0][0]
+        return reranked_candidates[0][0][0]
     
     summaries = fetch_summaries_by_organization(organization)
 
-    namespace = get_most_similar_namespace(query_embeddings, summaries)
+    namespace = get_most_similar_namespace(query_embeddings, summaries, query)
     print(f"Selected namespace: {namespace}")
     return namespace
 
@@ -246,19 +256,15 @@ def CHATBOT(query, user_id, session_id, organization):
     index = pc.Index(organization.lower())
 
     chat_history = initialize_chat_history(user_id=user_id, session_id=session_id)
-    # namespaces = get_meeting_titles()
-    # if not namespaces:
-    #     return print("no meeting titles found in the database.")
-    namespaces = ["Kickoff Meeting", "Project Meeting"]
 
     query_embeddings = get_embeddings(text=query)
-    meeting_title = resolve_namespace(query_embeddings=query_embeddings, organization=organization)
+    meeting_title = resolve_namespace(query_embeddings=query_embeddings, organization=organization, query=query)
     text_answers, text_date, text_title = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title, index=index)
-    print(f"Retrieved context: {text_answers}\nDate context: {text_date}\nTitle Context: {text_title}")
+    print(f"Retrieved context: {text_answers}\nDate context: {text_date[0]}\nTitle Context: {text_title[0]}")
 
     # chat_history 
 
-    response = decomposition_query_process(question=query, text_answers=text_answers, chat_history=process_chat_history(chat_history), text_date=text_date, text_title=text_title)
+    response = decomposition_query_process(question=query, text_answers=text_answers, chat_history=process_chat_history(chat_history), text_date=text_date[0], text_title=text_title[0])
 
     chat_history.append(query)
     chat_history.append(response)

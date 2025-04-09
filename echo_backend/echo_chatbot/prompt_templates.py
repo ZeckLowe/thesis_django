@@ -54,3 +54,13 @@ class prompt_templates:
         """
 
         return ChatPromptTemplate.from_template(prompt)
+
+    def followup_template():
+        prompt = """
+            You are a meeting facilitator. The user's query was ambiguous for you to answer. Generate a follow up question to aid you to answer the user's query.
+            Use the previous query and the list of recorded meeting titles and its summaries for context.
+            Previous query: {question}
+            Meeting list: {meeting_list}
+            """
+        
+        return ChatPromptTemplate.from_template(prompt)

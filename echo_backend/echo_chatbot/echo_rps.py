@@ -65,6 +65,9 @@ def check_index(organization):
         return pc.Index(index_name)
 
 def chunk_text_recursive(text, max_chunk_size=500):
+    """
+    Recursively chunk text into smaller parts
+    """
     # Helper function for recursive chunking
     def recursive_chunk(sentences, current_chunk=""):
         # Base case: if no sentences are left, return the current chunk
@@ -77,10 +80,20 @@ def chunk_text_recursive(text, max_chunk_size=500):
 
         # Check if the sentence itself exceeds the max_chunk_size
         if len(sentence) > max_chunk_size:
-            # Split the sentence into smaller parts
-            split_parts = [
-                sentence[i : i + max_chunk_size] for i in range(0, len(sentence), max_chunk_size)
-            ]
+            # Split the sentence into smaller parts without cutting words
+            words = sentence.split()
+            split_parts = []
+            part = ""
+            for word in words:
+                # Add the word to the part if it fits within max_chunk_size
+                if len(part) + len(word) + 1 <= max_chunk_size:
+                    part += " " + word if part else word
+                else:
+                    split_parts.append(part)
+                    part = word  # Start a new part with the current word
+            if part:
+                split_parts.append(part)  # Add any remaining part
+
             # Add the first part to the current chunk and handle the rest recursively
             return (
                 [current_chunk.strip()] if current_chunk.strip() else []

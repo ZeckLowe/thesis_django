@@ -19,7 +19,7 @@ class prompt_templates:
     def final_rag_template_with_memory():
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", "You are a meeting facilitator. This user will ask you a questions about the conversation of the meeting. Use the  context to answer the question. If you don't know the answer, just say you don't know. ALWAYS refer your answer to the context and keep the answer complete and concise. Don't use any font effect. Context: {context}, Meeting date: {text_date}, Meeting Title: {text_title}"),
+                ("system", "You are a meeting facilitator. This user will ask you a questions about the conversation of the meeting. Use the  context to answer the question. If you don't know the answer, just say you don't know. ALWAYS refer your answer to the context and keep the answer complete and concise and in paragraph. Don't use any font effect. Context: {context}, Meeting date: {text_date}, Meeting Title: {text_title}"),
                 MessagesPlaceholder("chat_history"),
                 ("system", "Here are some background questions and answers that will help you find answers from the context: {qa_pairs}"),
                 ("human", "{question}"),

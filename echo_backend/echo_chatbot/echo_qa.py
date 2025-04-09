@@ -12,6 +12,7 @@ from firebase_admin import credentials, firestore
 from .prompt_templates import prompt_templates
 from google.cloud.firestore_v1.base_query import FieldFilter
 from sentence_transformers import CrossEncoder
+from collections import Counter
 
 # Firestore Initialization
 # credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
@@ -71,7 +72,7 @@ def get_embeddings(text):
     print("Generating Embeddings: Done!")
     return text_embeddings
 
-def resolve_namespace(query_embeddings, organization, query):
+def resolve_namespace(query_embeddings, organization, user_id, session_id):
     """
     Resolves the namespace by either selecting the most similar one
     """
@@ -93,35 +94,61 @@ def resolve_namespace(query_embeddings, organization, query):
         
         print(f"Fetched summaries for organization '{organization}': {summaries}")
         return summaries
+    
+    def fetch_namespaces_used(user_id, session_id):
+        return ["Project Meeting", "Project Meeting", "Project Meeting", "Kickoff Meeting", "Kickoff Meeting"]
+    
+    def get_bayesian_update_namespaces(past_namespaces, decay_rate=0.7):
+        """
+        Applies Bayesian updating to boost frequently used namespaces.
+        """
+        namespace_counts = Counter(past_namespaces)
 
-    def get_most_similar_namespace(query_embeddings, summaries, query):
+        recency_weights = {title: (i + 1) ** decay_rate for i, title in enumerate(reversed(past_namespaces))}
+
+        # Normalize weights
+        weighted_counts = {title: recency_weights.get(title, 0) + namespace_counts[title] for title in namespace_counts}
+        total_weighted_count = sum(weighted_counts.values())
+
+        # Compute Bayesian probabilities with recency bias
+        posteriors = {title: weighted_counts[title] / total_weighted_count for title in namespace_counts}
+        print("\n# Bayesian Updating with Recency Bias: ", posteriors)
+
+        return posteriors
+
+    def get_most_similar_namespace(query_embeddings, summaries):
         """
         Rank namespaces by semantic similarity to the query.
         """
+        # Compute similarity with meeting summaries
         summary_embeddings = {title: get_embeddings(summary) for title, summary in summaries.items()}
-        print("Generated summary embeddings:", summary_embeddings)
-
-        similarities = {
+        summary_similarities = {
             title: cosine_similarity([query_embeddings], [embedding])[0][0] for title, embedding in summary_embeddings.items()
         }
-        print("Computed similarities:", similarities)
 
-        ranked_candidates = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
-        print("\n >Initial Ranking (Cosine Similarity):", ranked_candidates)
+        # Rank by similarity
+        ranked_namespaces = sorted(summary_similarities.items(), key=lambda x: x[1], reverse=True)
+        print("\n# Initial Ranking (Cosine Similarity):", ranked_namespaces)
 
-        cross_encoder_inputs = [(summaries[title], query) for title, _ in ranked_candidates]
-
-        scores = reranker.predict(cross_encoder_inputs)
-
-        reranked_candidates = sorted(zip(ranked_candidates, scores), key=lambda x: x[1], reverse=True)
-        
-        return reranked_candidates[0][0][0]
+        return ranked_namespaces
+    
     
     summaries = fetch_summaries_by_organization(organization)
 
-    namespace = get_most_similar_namespace(query_embeddings, summaries, query)
-    print(f"Selected namespace: {namespace}")
-    return namespace
+    past_namespaces = fetch_namespaces_used(user_id, session_id)
+
+    bayesian_scores = get_bayesian_update_namespaces(past_namespaces)
+
+    ranked_namespaces = get_most_similar_namespace(query_embeddings, summaries)
+
+    final_scores = {
+        title: (bayesian_scores.get(title, 0) + sim) for title, sim in ranked_namespaces
+    }
+
+    final_namespace = max(final_scores, key=final_scores.get)
+
+    print(f"Bayesian-updating namespace ranking: {final_scores}")
+    return final_namespace
 
 # Get Relevant Documents
 def query_pinecone_index(query_embeddings, meeting_title, index, top_k=5, include_metadata=True):
@@ -258,7 +285,7 @@ def CHATBOT(query, user_id, session_id, organization):
     chat_history = initialize_chat_history(user_id=user_id, session_id=session_id)
 
     query_embeddings = get_embeddings(text=query)
-    meeting_title = resolve_namespace(query_embeddings=query_embeddings, organization=organization, query=query)
+    meeting_title = resolve_namespace(query_embeddings=query_embeddings, organization=organization, user_id=user_id, session_id=session_id)
     text_answers, text_date, text_title = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title, index=index)
     print(f"Retrieved context: {text_answers}\nDate context: {text_date[0]}\nTitle Context: {text_title[0]}")
 

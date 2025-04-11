@@ -13,6 +13,7 @@ from .prompt_templates import prompt_templates
 from google.cloud.firestore_v1.base_query import FieldFilter
 from sentence_transformers import CrossEncoder
 from collections import Counter
+from fuzzywuzzy import fuzz
 
 # Firestore Initialization
 # credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
@@ -72,83 +73,90 @@ def get_embeddings(text):
     print("Generating Embeddings: Done!")
     return text_embeddings
 
-def resolve_namespace(query_embeddings, organization, user_id, session_id):
+def resolve_namespace(query, query_embeddings, summaries):
     """
-    Resolves the namespace by either selecting the most similar one
+    Resolves the namespace by selecting the most similar one using fuzzy matching (fuzzywuzzy).
     """
-    def fetch_summaries_by_organization(organization):
-        """
-        Fetches summaries by organization
-        """
-        summaries = {}
-        meetings_ref = db.collection("Meetings")
-        query = meetings_ref.where(filter=FieldFilter("organization", "==", organization))
-        docs = query.stream()
-
-        for doc in docs:
-            data = doc.to_dict()
-            meeting_title = data.get("meetingTitle")
-            summary = data.get("meetingSummary")
-            if meeting_title and summary:
-                summaries[meeting_title] = summary
-        
-        print(f"Fetched summaries for organization '{organization}': {summaries}")
-        return summaries
-    
-    def fetch_namespaces_used(user_id, session_id):
-        return ["Project Meeting", "Project Meeting", "Project Meeting", "Kickoff Meeting", "Kickoff Meeting"]
-    
-    def get_bayesian_update_namespaces(past_namespaces, decay_rate=0.7):
-        """
-        Applies Bayesian updating to boost frequently used namespaces.
-        """
-        namespace_counts = Counter(past_namespaces)
-
-        recency_weights = {title: (i + 1) ** decay_rate for i, title in enumerate(reversed(past_namespaces))}
-
-        # Normalize weights
-        weighted_counts = {title: recency_weights.get(title, 0) + namespace_counts[title] for title in namespace_counts}
-        total_weighted_count = sum(weighted_counts.values())
-
-        # Compute Bayesian probabilities with recency bias
-        posteriors = {title: weighted_counts[title] / total_weighted_count for title in namespace_counts}
-        print("\n# Bayesian Updating with Recency Bias: ", posteriors)
-
-        return posteriors
-
-    def get_most_similar_namespace(query_embeddings, summaries):
+    def ambiguous_fuzzy(query_embeddings, summaries):
         """
         Rank namespaces by semantic similarity to the query.
-        """
+        """   
         # Compute similarity with meeting summaries
         summary_embeddings = {title: get_embeddings(summary) for title, summary in summaries.items()}
+        print("Generated summary embeddings:", summary_embeddings)
+
         summary_similarities = {
             title: cosine_similarity([query_embeddings], [embedding])[0][0] for title, embedding in summary_embeddings.items()
         }
+        print("Computed Summary Similarity:", summary_similarities)
 
         # Rank by similarity
-        ranked_namespaces = sorted(summary_similarities.items(), key=lambda x: x[1], reverse=True)
-        print("\n# Initial Ranking (Cosine Similarity):", ranked_namespaces)
+        ranked_candidates = sorted(summary_similarities.items(), key=lambda x: x[1], reverse=True)
+        print("\n🔹 Initial Ranking (Cosine Similarity):", ranked_candidates)
+        
+        # Prepare input for re-ranking
+        cross_encoder_inputs = [(summaries[title], query) for title, _ in ranked_candidates]
 
-        return ranked_namespaces
-    
-    
-    summaries = fetch_summaries_by_organization(organization)
+        # Compute cross-encoder scores
+        scores = reranker.predict(cross_encoder_inputs)
 
-    past_namespaces = fetch_namespaces_used(user_id, session_id)
+        # Re-rank based on cross-encoder scores
+        reranked_candidates = sorted(zip(ranked_candidates, scores), key=lambda x: x[1], reverse=True)
+        print("\n🔹 Cross Encoder:", reranked_candidates)
 
-    bayesian_scores = get_bayesian_update_namespaces(past_namespaces)
+        score_diff = reranked_candidates[0][1] - reranked_candidates[1][1]
+        print("Score difference:", score_diff)
 
-    ranked_namespaces = get_most_similar_namespace(query_embeddings, summaries)
+        if score_diff < 0.9:
+            print("Ambiguous in Cross Encoder")
+            return ""
 
-    final_scores = {
-        title: (bayesian_scores.get(title, 0) + sim) for title, sim in ranked_namespaces
-    }
+        print("\n🔹 Re-ranked Candidates (Cross-Encoder):", reranked_candidates)
+        
+        return reranked_candidates[0][0][0]
 
-    final_namespace = max(final_scores, key=final_scores.get)
+    def get_most_similar_namespace(query, query_embeddings, summaries):
+        """
+        Rank namespaces by fuzzy matching (using fuzzywuzzy's token_set_ratio).
+        """
+        top_two = {}
 
-    print(f"Bayesian-updating namespace ranking: {final_scores}")
-    return final_namespace
+        similarities = {
+            title: (fuzz.token_set_ratio(query.lower(), f"{title}".lower()) + fuzz.token_set_ratio(query.lower(), f"{summary}".lower()))/2
+            for title, summary in summaries.items()
+        }
+
+        print("Computed fuzzy similarities:", similarities)
+
+        # Rank namespaces based on similarity score
+        ranked_namespaces = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
+        print("Ranked namespaces:", ranked_namespaces)
+
+        # Check for ambiguity
+        if len(ranked_namespaces) > 1:
+            diff = ranked_namespaces[0][1] - ranked_namespaces[1][1]
+            if diff < 15:
+                print("Ambiguous fuzzy match.")
+                top_two[ranked_namespaces[0][0]] = summaries.get(ranked_namespaces[0][0])
+                top_two[ranked_namespaces[1][0]] = summaries.get(ranked_namespaces[1][0])
+                print("Top two:", top_two)
+                return ambiguous_fuzzy(query_embeddings, top_two)
+
+        return ranked_namespaces[0][0] if ranked_namespaces else ""
+
+    namespace = get_most_similar_namespace(query, query_embeddings, summaries)
+    print(f"Selected namespace: {namespace}")
+    return namespace
+
+def generate_followup_question(question, meeting_summaries):
+    """
+    Generate followup response based on the previous query.
+    """
+    followup_prompt = prompt_templates.followup_template().format(question=question, meeting_list=meeting_summaries)
+    followup_response = LLM.invoke(followup_prompt)
+    print("Generating followup question: Done!")
+
+    return followup_response.content
 
 # Get Relevant Documents
 def query_pinecone_index(query_embeddings, meeting_title, index, top_k=5, include_metadata=True):
@@ -173,6 +181,25 @@ def query_pinecone_index(query_embeddings, meeting_title, index, top_k=5, includ
     print("Querying Pinecone Index: Done!")
     return " ".join([doc['metadata']['text'] for doc in query_response['matches']]), [doc['metadata']['date'] for doc in query_response['matches']], [doc['metadata']['title'] for doc in query_response['matches']]
 
+def fetch_summaries_by_organization(organization):
+        """
+        Fetches summaries by organization
+        """
+        summaries = {}
+        meetings_ref = db.collection("Meetings")
+        query = meetings_ref.where(filter=FieldFilter("organization", "==", organization))
+        docs = query.stream()
+
+        for doc in docs:
+            data = doc.to_dict()
+            meeting_title = data.get("meetingTitle")
+            summary = data.get("meetingSummary")
+            if meeting_title and summary:
+                summaries[meeting_title] = summary
+        
+        print(f"Fetched summaries for organization '{organization}': {summaries}")
+        return summaries
+
 def decomposition_query_process(question, text_answers, chat_history, text_date, text_title):
     """Implements decomposition query"""
 
@@ -184,11 +211,11 @@ def decomposition_query_process(question, text_answers, chat_history, text_date,
 
         return output.content
     
-    def decompose_question(question):
+    def decompose_question(question, chat_history):
         """
         Decomposes a complex question into smaller questions.
         """
-        prompt = prompt_templates.decomposition_template().format(question=question)
+        prompt = prompt_templates.decomposition_template().format(question=question, chat_history=chat_history)
         response = LLM.invoke(prompt)
         subquestions = response.content.split("\n")
         print("Decomposing Question: Done!")
@@ -207,7 +234,7 @@ def decomposition_query_process(question, text_answers, chat_history, text_date,
 
         return qa_pairs
     
-    def build_final_answer(question, context, qa_pairs, text_date, text_title):
+    def build_final_answer(question, context, chat_history, qa_pairs, text_date, text_title):
         """Builds a final answer by integrating the context and QA pairs."""
         qa_pairs_str = "\n".join([f"Q: {q}\nA: {a}" for q, a in qa_pairs])
         # final_prompt = prompt_templates.final_rag_template().format(context=context, qa_pairs=qa_pairs_str, question=question)
@@ -220,7 +247,7 @@ def decomposition_query_process(question, text_answers, chat_history, text_date,
     subquestions = decompose_question(question)
     qa_pairs = generate_qa_pairs(subquestions, text_answers)
     print(qa_pairs)
-    final_answer = build_final_answer(question, text_answers, qa_pairs, text_date, text_title)
+    final_answer = build_final_answer(question, text_answers, chat_history, qa_pairs, text_date, text_title)
 
     return output_parser(final_answer)
 
@@ -283,9 +310,16 @@ def CHATBOT(query, user_id, session_id, organization):
     index = pc.Index(organization.lower())
 
     chat_history = initialize_chat_history(user_id=user_id, session_id=session_id)
+    summaries = fetch_summaries_by_organization(organization=organization)
 
     query_embeddings = get_embeddings(text=query)
-    meeting_title = resolve_namespace(query_embeddings=query_embeddings, organization=organization, user_id=user_id, session_id=session_id)
+    meeting_title = resolve_namespace(query=query, query_embeddings=query_embeddings, summaries=summaries)
+
+    if meeting_title == "":
+        print("AMBIGUOUS MATCH")
+        response = generate_followup_question(query, summaries)
+        return response
+
     text_answers, text_date, text_title = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title, index=index)
     print(f"Retrieved context: {text_answers}\nDate context: {text_date[0]}\nTitle Context: {text_title[0]}")
 

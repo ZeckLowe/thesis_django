@@ -29,7 +29,7 @@ PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 # Pinecone Initialization
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = ""
-LLM = ChatOpenAI(temperature=0, model_name="gpt-4-turbo")
+LLM = ChatOpenAI(temperature=0, model_name="gpt-4o-mini")
 
 # OpenAI Initialization
 EMBEDDINGS = OpenAIEmbeddings(model='text-embedding-3-small', openai_api_key=OPENAI_API_KEY)
@@ -68,53 +68,41 @@ def chunk_text_recursive(text, max_chunk_size=500):
     """
     Recursively chunk text into smaller parts
     """
-    # Helper function for recursive chunking
     def recursive_chunk(sentences, current_chunk=""):
-        # Base case: if no sentences are left, return the current chunk
         if not sentences:
             return [current_chunk.strip()] if current_chunk.strip() else []
 
-        # Extract the next sentence
         sentence = sentences[0]
         remaining_sentences = sentences[1:]
 
-        # Check if the sentence itself exceeds the max_chunk_size
         if len(sentence) > max_chunk_size:
-            # Split the sentence into smaller parts without cutting words
             words = sentence.split()
             split_parts = []
             part = ""
             for word in words:
-                # Add the word to the part if it fits within max_chunk_size
                 if len(part) + len(word) + 1 <= max_chunk_size:
                     part += " " + word if part else word
                 else:
                     split_parts.append(part)
-                    part = word  # Start a new part with the current word
+                    part = word
             if part:
-                split_parts.append(part)  # Add any remaining part
+                split_parts.append(part)
 
-            # Add the first part to the current chunk and handle the rest recursively
             return (
                 [current_chunk.strip()] if current_chunk.strip() else []
             ) + split_parts + recursive_chunk(remaining_sentences, "")
         
-        # Check if adding the current sentence exceeds the max_chunk_size
         if len(current_chunk) + len(sentence) + 1 > max_chunk_size:
-            # Return the current chunk and continue with the next sentences
             return [current_chunk.strip()] + recursive_chunk(remaining_sentences, sentence.strip() + "\n")
+        
         else:
-            # Add the current sentence and continue recursively
             return recursive_chunk(remaining_sentences, current_chunk + sentence.strip() + "\n")
 
-    # Ensure each text ends with a newline for sentence splitting
     if not text.endswith("\n"):
         text += "\n"
 
-    # Split text into sentences by newline and filter out empty sentences
     sentences = [sentence for sentence in text.split("\n") if sentence.strip()]
 
-    # Start recursive chunking
     return recursive_chunk(sentences)
 
 def generate_embeddings(texts):

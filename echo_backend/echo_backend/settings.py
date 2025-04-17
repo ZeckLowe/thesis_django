@@ -16,20 +16,9 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# # ML Service configurations
-FFMPEG_PATH = os.environ.get('FFMPEG_PATH', r"C:\PATH_Programs\ffmpeg-2024-08-01-git-bcf08c1171-full_build\bin")
-
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-i1cbi*!3ndq+$jiz546g0kf@$&#ci&(-$uc2z+yr)d232#y=#x'
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*', '10.0.2.2', "172.29.4.137"]
+ALLOWED_HOSTS = ['*', '10.0.2.2', "172.29.4.137", "127.0.0.1", "localhost"]
 
 
 # Application definition

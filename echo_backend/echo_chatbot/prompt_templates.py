@@ -42,7 +42,7 @@ class prompt_templates:
                 ),
                 (
                     "system",
-                    "You may use the following previous chat interactions only if they are relevant to the context and current question. "
+                    "You may use the following previous chat interactions only if they are relevant to the context and current query. "
                 ),
                 MessagesPlaceholder("chat_history"),
                 (
@@ -75,7 +75,9 @@ class prompt_templates:
                 (
                     "system",
                     "Below is the conversation context, followed by prior related interactions and the user's current question."
-                    "Use the context and relevant chat history to help break down the question into no more than three specific subquestions."
+                    "Use the context and chat history to decide whether the current question consists of multiple parts or distinct sub-questions."
+                    "If the question is clearly a single, standalone query, do not decompose it and return the original query."
+                    "If the question contains multiple inquiries or distinct components, break it down into no more than three specific sub-questions for clarity."
                     "Do not rephrase unknown terms. Focus on clarity and specificity."
 
                     "Previous Chat History:"

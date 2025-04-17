@@ -94,6 +94,13 @@ def resolve_namespace(query, query_embeddings, summaries):
         ranked_candidates = sorted(summary_similarities.items(), key=lambda x: x[1], reverse=True)
         print("\n🔹 Initial Ranking (Cosine Similarity):", ranked_candidates)
         
+        score_diff = ranked_candidates[0][1] - ranked_candidates[1][1]
+        print("Score difference:", score_diff)
+
+        if score_diff > 0.2:
+            print("Cosine similarity is clear")
+            return ranked_candidates[0][0]
+        
         # Prepare input for re-ranking
         cross_encoder_inputs = [(summaries[title], query) for title, _ in ranked_candidates]
 

@@ -19,10 +19,12 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 # Firestore Initialization
 credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+# credential_path = "/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json"
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 
 if not firebase_admin._apps:
     cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    # cred = credentials.Certificate("/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json")
     firebase_admin.initialize_app(cred)
 
 try:
@@ -243,7 +245,7 @@ def CHATBOT(query, user_id, session_id, organization):
     print(f"Current User ID: {user_id}")
     print(f"Current Session ID: {session_id}")
     print(f"Organization: {organization}")
-    index = pc.Index(organization.lower())
+    index = pc.Index(organization.lower().replace(" ", "-"))
 
     chat_history = initialize_chat_history(user_id=user_id, session_id=session_id)
     # namespaces = get_meeting_titles()

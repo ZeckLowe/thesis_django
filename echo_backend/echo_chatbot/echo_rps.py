@@ -12,14 +12,13 @@ import firebase_admin
 
 
 # Firestore Initialization
-credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
-# credential_path = "/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json"
-
+# credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 
 if not firebase_admin._apps:
-    cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
-    # cred = credentials.Certificate("/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json")
+    # cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
     firebase_admin.initialize_app(cred)
 
 db = firestore.Client()
@@ -30,7 +29,7 @@ PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 # Pinecone Initialization
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = ""
-LLM = ChatOpenAI(temperature=0, model_name="gpt-4-turbo")
+LLM = ChatOpenAI(temperature=0, model_name="gpt-4o-mini")
 
 # OpenAI Initialization
 EMBEDDINGS = OpenAIEmbeddings(model='text-embedding-3-small', openai_api_key=OPENAI_API_KEY)
@@ -66,43 +65,44 @@ def check_index(organization):
         return pc.Index(index_name)
 
 def chunk_text_recursive(text, max_chunk_size=500):
-    # Helper function for recursive chunking
+    """
+    Recursively chunk text into smaller parts
+    """
     def recursive_chunk(sentences, current_chunk=""):
-        # Base case: if no sentences are left, return the current chunk
         if not sentences:
             return [current_chunk.strip()] if current_chunk.strip() else []
 
-        # Extract the next sentence
         sentence = sentences[0]
         remaining_sentences = sentences[1:]
 
-        # Check if the sentence itself exceeds the max_chunk_size
         if len(sentence) > max_chunk_size:
-            # Split the sentence into smaller parts
-            split_parts = [
-                sentence[i : i + max_chunk_size] for i in range(0, len(sentence), max_chunk_size)
-            ]
-            # Add the first part to the current chunk and handle the rest recursively
+            words = sentence.split()
+            split_parts = []
+            part = ""
+            for word in words:
+                if len(part) + len(word) + 1 <= max_chunk_size:
+                    part += " " + word if part else word
+                else:
+                    split_parts.append(part)
+                    part = word
+            if part:
+                split_parts.append(part)
+
             return (
                 [current_chunk.strip()] if current_chunk.strip() else []
             ) + split_parts + recursive_chunk(remaining_sentences, "")
         
-        # Check if adding the current sentence exceeds the max_chunk_size
         if len(current_chunk) + len(sentence) + 1 > max_chunk_size:
-            # Return the current chunk and continue with the next sentences
             return [current_chunk.strip()] + recursive_chunk(remaining_sentences, sentence.strip() + "\n")
+        
         else:
-            # Add the current sentence and continue recursively
             return recursive_chunk(remaining_sentences, current_chunk + sentence.strip() + "\n")
 
-    # Ensure each text ends with a newline for sentence splitting
     if not text.endswith("\n"):
         text += "\n"
 
-    # Split text into sentences by newline and filter out empty sentences
     sentences = [sentence for sentence in text.split("\n") if sentence.strip()]
 
-    # Start recursive chunking
     return recursive_chunk(sentences)
 
 def generate_embeddings(texts):

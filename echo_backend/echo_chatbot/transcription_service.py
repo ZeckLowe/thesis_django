@@ -1,5 +1,5 @@
 import re
-import torch 
+import torch
 from pyannote.audio import Pipeline
 import whisper
 import os
@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from pydub import AudioSegment
 import tempfile
 import logging
+
+
 
 # Ensure FFMPEG_DIR exists before adding it to PATH
 FFMPEG_DIR = getattr(settings, "FFMPEG_DIR", None)
@@ -28,6 +30,7 @@ pipeline = Pipeline.from_pretrained(
     settings.DIARIZATION_MODEL,
     use_auth_token=settings.HUGGING_FACE_TOKEN, 
 ).to(device)
+
 
 whisper_model = whisper.load_model(settings.WHISPER_MODEL).to(device)
 
@@ -121,7 +124,7 @@ def transcribe_segment(audio_file_path, start, end):
         audio_tensor,
         language="english",
         temperature=0.0,
-        no_speech_threshold=0.6,
+        no_speech_threshold=0.3,
         condition_on_previous_text=True
     )
     return clean_text(result["text"])
@@ -161,7 +164,8 @@ def extract_speaker_embedding(audio_file_path, start, end):
     audio_segment = audio[int(start * 16000):int(end * 16000)]
     
     # Ensure we have enough audio data to extract an embedding
-    min_samples = 16000 * 2  # At least 2 seconds of audio
+    # min_samples = 16000 * 1  
+    min_samples = int(16000 * 0.5)
     if len(audio_segment) < min_samples:
         print(f"Warning: Audio segment too short ({len(audio_segment)/16000:.2f}s), minimum 2s required")
         if len(audio) >= min_samples:
@@ -252,46 +256,8 @@ def store_speaker_embedding(name, embedding):
         print(f"Problematic embedding sample: {embedding[:5] if isinstance(embedding, list) else embedding}")
         return False
 
-def init_pinecone():
-    """Initialize Pinecone client and create index if it doesn't exist"""
-    global pc_client, pinecone_index
-    
-    try:
-        pc_client = Pinecone(api_key=settings.PINECONE_API_KEY)
-        
-        existing_indexes = pc_client.list_indexes().names()
-        
-        # Make sure the dimension setting is correct
-        dimension = settings.PINECONE_DIMENSION # Hard-coded for clarity, could also use settings.PINECONE_DIMENSION
-        
-        if settings.PINECONE_INDEX_NAME not in existing_indexes:
-            print(f"Creating new Pinecone index: {settings.PINECONE_INDEX_NAME}")
-            pc_client.create_index(
-                name=settings.PINECONE_INDEX_NAME,
-                dimension=dimension,
-                metric="cosine",
-                spec=ServerlessSpec(
-                    cloud=settings.PINECONE_CLOUD,
-                    region=settings.PINECONE_REGION
-                )
-            )
-            time.sleep(10)
-            print(f"Index {settings.PINECONE_INDEX_NAME} created successfully with dimension {dimension}")
-        else:
-            # Check if existing index has correct dimensions
-            index_info = pc_client.describe_index(settings.PINECONE_INDEX_NAME)
-            if hasattr(index_info, 'dimension') and index_info.dimension != dimension:
-                print(f"WARNING: Existing index has dimension {index_info.dimension}, but code expects {dimension}")
-        
-        pinecone_index = pc_client.Index(settings.PINECONE_INDEX_NAME)
-        print(f"Connected to Pinecone index: {settings.PINECONE_INDEX_NAME}")
-        return pinecone_index
-    
-    except Exception as e:
-        print(f"Error initializing Pinecone: {str(e)}")
-        raise
 
-def find_matching_speaker(embedding, threshold=0.6):
+def find_matching_speaker(embedding, threshold=0.5): #lower threshold if needed
     """Find matching speaker from stored embeddings using Pinecone."""
     try:
         # Query for closest embedding using cosine similarity
@@ -324,6 +290,9 @@ def transcribe_audio_file(audio_file_path):
         diarization = pipeline(audio_file_path)
         print("Diarization successful.")
         
+        print("All raw segments from diarization:")
+        for segment, track, speaker in diarization.itertracks(yield_label=True):
+            print(f"Raw segment: {segment.start:.2f} to {segment.end:.2f}, speaker: {speaker}")
         # First pass: collect segments and identify speakers
         segments = []
         speaker_names = {}
@@ -331,9 +300,7 @@ def transcribe_audio_file(audio_file_path):
         introduction_phase = True
         min_segment_length = settings.MIN_SEGMENT_LENGTH
         ignore_seconds = settings.IGNORE_FIRST_SECONDS
-
-        # Add a counter for segments
-        segment_counter = 0
+        INTRODUCTION_PHASE_MAX_TIME = 20
 
         # Debug the output structure of diarization
         first_track = next(diarization.itertracks(yield_label=True), None)
@@ -343,14 +310,20 @@ def transcribe_audio_file(audio_file_path):
         
         for segment, track, speaker in diarization.itertracks(yield_label=True):
             try:
+                # End introduction phase based on the time
+                if segment.start > INTRODUCTION_PHASE_MAX_TIME:
+                    introduction_phase = False
+
                 # Skip segments that are too short or in the ignored initial period
                 if segment.start < ignore_seconds:
                     continue
 
-                if segment.end - segment.start < min_segment_length:
+                # if segment.end - segment.start < min_segment_length:
+                #     continue
+                # To this
+                if segment.end - segment.start + 0.001 < min_segment_length:  # Add a small epsilon
                     continue
 
-                segment_counter += 1
                 print(f"Processing segment: {segment.start:.2f} to {segment.end:.2f}, speaker: {speaker}")
                 
                 # Transcribe the segment
@@ -374,7 +347,8 @@ def transcribe_audio_file(audio_file_path):
                     print(f"Failed to extract embedding for segment {segment}: {str(e)}")
                     embedding = None
 
-                if introduction_phase and "name is" in text.lower():
+                # Extract name during introduction phase 
+                if introduction_phase:
                     name = extract_name(text)
                     if name:
                         speaker_names[speaker] = name
@@ -538,4 +512,3 @@ def convert_to_wav(input_file, output_file=None, sample_rate=16000):
     except Exception as e:
         logger.error(f"Error converting audio to WAV: {str(e)}", exc_info=True)
         raise
-

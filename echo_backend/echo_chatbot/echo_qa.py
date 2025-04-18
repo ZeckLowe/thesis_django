@@ -16,13 +16,13 @@ from collections import Counter
 from fuzzywuzzy import fuzz
 
 # Firestore Initialization
-# credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
-credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+# credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 
 if not firebase_admin._apps:
-    # cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
-    cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    # cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
     firebase_admin.initialize_app(cred)
 
 try:
@@ -147,7 +147,7 @@ def resolve_namespace(query, summaries, user_id, session_id):
             else:
                 print(f"No document found for user_id={user_id}, session_id={session_id}")
         except Exception as e:
-            print(f"Error initializing chat history: {str(e)}")
+            print(f"Error initializing namespace: {str(e)}")
         
         return primary_namespace
 
@@ -270,7 +270,7 @@ def decomposition_query_process(question, text_answers, chat_history, text_date,
 
         return final_response
     
-    subquestions = decompose_question(question)
+    subquestions = decompose_question(question, chat_history)
     qa_pairs = generate_qa_pairs(subquestions, text_answers)
     print(qa_pairs)
     final_answer = build_final_answer(question, text_answers, chat_history, qa_pairs, text_date, text_title)
@@ -339,7 +339,7 @@ def CHATBOT(query, user_id, session_id, organization):
     summaries = fetch_summaries_by_organization(organization=organization)
 
     query_embeddings = get_embeddings(text=query)
-    meeting_title = resolve_namespace(query=query, query_embeddings=query_embeddings, summaries=summaries)
+    meeting_title = resolve_namespace(query=query, summaries=summaries, user_id=user_id, session_id=session_id)
 
     if meeting_title == "":
         print("AMBIGUOUS MATCH")

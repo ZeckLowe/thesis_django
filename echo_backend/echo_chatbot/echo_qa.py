@@ -16,13 +16,13 @@ from collections import Counter
 from fuzzywuzzy import fuzz
 
 # Firestore Initialization
-# credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
-credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+# credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 
 if not firebase_admin._apps:
-    # cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
-    cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    # cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
     firebase_admin.initialize_app(cred)
 
 try:
@@ -73,61 +73,88 @@ def get_embeddings(text):
     print("Generating Embeddings: Done!")
     return text_embeddings
 
-def resolve_namespace(query, query_embeddings, summaries):
+def resolve_namespace(query, summaries, user_id, session_id):
     """
     Resolves the namespace by selecting the most similar one using fuzzy matching (fuzzywuzzy).
     """
-    def ambiguous_fuzzy(query_embeddings, summaries):
+    # def ambiguous_fuzzy(query_embeddings, summaries):
+    #     """
+    #     Rank namespaces by semantic similarity to the query.
+    #     """   
+    #     # Compute similarity with meeting summaries
+    #     summary_embeddings = {title: get_embeddings(summary) for title, summary in summaries.items()}
+    #     print("Generated summary embeddings:", summary_embeddings)
+
+    #     summary_similarities = {
+    #         title: cosine_similarity([query_embeddings], [embedding])[0][0] for title, embedding in summary_embeddings.items()
+    #     }
+    #     print("Computed Summary Similarity:", summary_similarities)
+
+    #     # Rank by similarity
+    #     ranked_candidates = sorted(summary_similarities.items(), key=lambda x: x[1], reverse=True)
+    #     print("\n🔹 Initial Ranking (Cosine Similarity):", ranked_candidates)
+        
+    #     score_diff = ranked_candidates[0][1] - ranked_candidates[1][1]
+    #     print("Score difference:", score_diff)
+        
+    #     # Prepare input for re-ranking
+    #     cross_encoder_inputs = [(summaries[title], query) for title, _ in ranked_candidates]
+
+    #     # Compute cross-encoder scores
+    #     scores = reranker.predict(cross_encoder_inputs)
+
+    #     # Re-rank based on cross-encoder scores
+    #     reranked_candidates = sorted(zip(ranked_candidates, scores), key=lambda x: x[1], reverse=True)
+    #     print("\n🔹 Cross Encoder:", reranked_candidates)
+
+    #     score_diff = reranked_candidates[0][1] - reranked_candidates[1][1]
+    #     print("Score difference:", score_diff)
+
+    #     if score_diff < 0.9:
+    #         print("Ambiguous in Cross Encoder")
+    #         return ""
+
+    #     print("\n🔹 Re-ranked Candidates (Cross-Encoder):", reranked_candidates)
+        
+    #     return reranked_candidates[0][0][0]
+    def store_primary_namespace(user_id, session_id, primary_namespace):
         """
-        Rank namespaces by semantic similarity to the query.
-        """   
-        # Compute similarity with meeting summaries
-        summary_embeddings = {title: get_embeddings(summary) for title, summary in summaries.items()}
-        print("Generated summary embeddings:", summary_embeddings)
+        Store the primary namespace in Firestore.
+        """
+        doc_ref = db.collection("chatHistory").document(user_id).collection("session").document(session_id)
+        try:
+            doc_ref.update({
+                'primary_namespace': primary_namespace
+            })
+        except Exception as e:
+            print(f"Error updating chat history: {str(e)}")
+        print(f"Stored primary namespace '{primary_namespace}' for user_id={user_id}, session_id={session_id}")
 
-        summary_similarities = {
-            title: cosine_similarity([query_embeddings], [embedding])[0][0] for title, embedding in summary_embeddings.items()
-        }
-        print("Computed Summary Similarity:", summary_similarities)
+    def get_primary_namespace(user_id, session_id):
+        """
+        Fetch the primary namespace for the user and session.
+        """
+        doc_ref = db.collection("chatHistory").document(user_id).collection("session").document(session_id)
+        doc_snapshot = doc_ref.get()
+        try:
+            if doc_snapshot.exists:
+                primary_namespace = doc_snapshot.get('primary_namespace')
+                if primary_namespace is None:
+                    print(f"No 'namespace' field found in document for user_id={user_id}, session_id={session_id}")
+                    return ""
 
-        # Rank by similarity
-        ranked_candidates = sorted(summary_similarities.items(), key=lambda x: x[1], reverse=True)
-        print("\n🔹 Initial Ranking (Cosine Similarity):", ranked_candidates)
+                print(f"Primary Namespace Initialized: {primary_namespace}")
+            else:
+                print(f"No document found for user_id={user_id}, session_id={session_id}")
+        except Exception as e:
+            print(f"Error initializing namespace: {str(e)}")
         
-        score_diff = ranked_candidates[0][1] - ranked_candidates[1][1]
-        print("Score difference:", score_diff)
+        return primary_namespace
 
-        if score_diff > 0.2:
-            print("Cosine similarity is clear")
-            return ranked_candidates[0][0]
-        
-        # Prepare input for re-ranking
-        cross_encoder_inputs = [(summaries[title], query) for title, _ in ranked_candidates]
-
-        # Compute cross-encoder scores
-        scores = reranker.predict(cross_encoder_inputs)
-
-        # Re-rank based on cross-encoder scores
-        reranked_candidates = sorted(zip(ranked_candidates, scores), key=lambda x: x[1], reverse=True)
-        print("\n🔹 Cross Encoder:", reranked_candidates)
-
-        score_diff = reranked_candidates[0][1] - reranked_candidates[1][1]
-        print("Score difference:", score_diff)
-
-        if score_diff < 0.9:
-            print("Ambiguous in Cross Encoder")
-            return ""
-
-        print("\n🔹 Re-ranked Candidates (Cross-Encoder):", reranked_candidates)
-        
-        return reranked_candidates[0][0][0]
-
-    def get_most_similar_namespace(query, query_embeddings, summaries):
+    def get_most_similar_namespace(query, summaries, user_id, session_id):
         """
         Rank namespaces by fuzzy matching (using fuzzywuzzy's token_set_ratio).
         """
-        top_two = {}
-
         similarities = {
             title: (fuzz.token_set_ratio(query.lower(), f"{title}".lower()) + fuzz.token_set_ratio(query.lower(), f"{summary}".lower()))/2
             for title, summary in summaries.items()
@@ -144,16 +171,16 @@ def resolve_namespace(query, query_embeddings, summaries):
             diff = ranked_namespaces[0][1] - ranked_namespaces[1][1]
             if diff < 15:
                 print("Ambiguous fuzzy match.")
-                top_two[ranked_namespaces[0][0]] = summaries.get(ranked_namespaces[0][0])
-                top_two[ranked_namespaces[1][0]] = summaries.get(ranked_namespaces[1][0])
-                print("Top two:", top_two)
-                return ambiguous_fuzzy(query_embeddings, top_two)
-
+                return ""
+            
+        store_primary_namespace(user_id, session_id, ranked_namespaces[0][0])
         return ranked_namespaces[0][0] if ranked_namespaces else ""
 
-    namespace = get_most_similar_namespace(query, query_embeddings, summaries)
-    print(f"Selected namespace: {namespace}")
-    return namespace
+    primary_namespace = get_primary_namespace(user_id, session_id)
+    if primary_namespace == "":
+        primary_namespace = get_most_similar_namespace(query, summaries, user_id, session_id)
+    print(f"Selected namespace: {primary_namespace}")
+    return primary_namespace
 
 def generate_followup_question(question, meeting_summaries):
     """
@@ -209,14 +236,6 @@ def fetch_summaries_by_organization(organization):
 
 def decomposition_query_process(question, text_answers, chat_history, text_date, text_title):
     """Implements decomposition query"""
-
-    def output_parser(output):
-        """
-        Helps parses the LLM output, prints it, and returns it.
-        """
-        print("\n" + output.content + "\n")
-
-        return output.content
     
     def decompose_question(question, chat_history):
         """
@@ -251,12 +270,12 @@ def decomposition_query_process(question, text_answers, chat_history, text_date,
 
         return final_response
     
-    subquestions = decompose_question(question)
+    subquestions = decompose_question(question, chat_history)
     qa_pairs = generate_qa_pairs(subquestions, text_answers)
     print(qa_pairs)
     final_answer = build_final_answer(question, text_answers, chat_history, qa_pairs, text_date, text_title)
 
-    return output_parser(final_answer)
+    return final_answer.content
 
 def initialize_chat_history(user_id, session_id):
     """
@@ -320,11 +339,15 @@ def CHATBOT(query, user_id, session_id, organization):
     summaries = fetch_summaries_by_organization(organization=organization)
 
     query_embeddings = get_embeddings(text=query)
-    meeting_title = resolve_namespace(query=query, query_embeddings=query_embeddings, summaries=summaries)
+    meeting_title = resolve_namespace(query=query, summaries=summaries, user_id=user_id, session_id=session_id)
 
     if meeting_title == "":
         print("AMBIGUOUS MATCH")
         response = generate_followup_question(query, summaries)
+        
+        chat_history.append(query)
+        chat_history.append(response)
+        update_chat_history(user_id, session_id, chat_history)
         return response
 
     text_answers, text_date, text_title = query_pinecone_index(query_embeddings=query_embeddings, meeting_title=meeting_title, index=index)

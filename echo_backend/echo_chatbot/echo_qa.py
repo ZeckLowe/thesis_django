@@ -270,7 +270,7 @@ def decomposition_query_process(question, text_answers, chat_history, text_date,
 
         return final_response
     
-    subquestions = decompose_question(question)
+    subquestions = decompose_question(question, chat_history)
     qa_pairs = generate_qa_pairs(subquestions, text_answers)
     print(qa_pairs)
     final_answer = build_final_answer(question, text_answers, chat_history, qa_pairs, text_date, text_title)
@@ -339,7 +339,7 @@ def CHATBOT(query, user_id, session_id, organization):
     summaries = fetch_summaries_by_organization(organization=organization)
 
     query_embeddings = get_embeddings(text=query)
-    meeting_title = resolve_namespace(query=query, query_embeddings=query_embeddings, summaries=summaries)
+    meeting_title = resolve_namespace(query=query, summaries=summaries, user_id=user_id, session_id=session_id)
 
     if meeting_title == "":
         print("AMBIGUOUS MATCH")

@@ -16,13 +16,13 @@ from collections import Counter
 from fuzzywuzzy import fuzz
 
 # Firestore Initialization
-# credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
-credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+# credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 
 if not firebase_admin._apps:
-    # cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
-    cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    # cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
     firebase_admin.initialize_app(cred)
 
 try:
@@ -147,7 +147,7 @@ def resolve_namespace(query, summaries, user_id, session_id):
             else:
                 print(f"No document found for user_id={user_id}, session_id={session_id}")
         except Exception as e:
-            print(f"Error initializing chat history: {str(e)}")
+            print(f"Error initializing namespace: {str(e)}")
         
         return primary_namespace
 

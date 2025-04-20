@@ -9,7 +9,7 @@ from langchain_openai import OpenAI
 from langchain.prompts import PromptTemplate
 import json
 import ast
-from rapidfuzz import fuzz
+# from rapidfuzz import fuzz
 from datetime import datetime
 
 load_dotenv()

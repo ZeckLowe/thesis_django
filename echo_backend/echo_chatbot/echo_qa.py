@@ -17,12 +17,12 @@ from fuzzywuzzy import fuzz
 
 # Firestore Initialization
 # credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
-credential_path = r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+credential_path = "/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json"
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 
 if not firebase_admin._apps:
     # cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
-    cred = credentials.Certificate(r'C:\Codes\Django\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    cred = credentials.Certificate("/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json")
     firebase_admin.initialize_app(cred)
 
 try:
@@ -209,14 +209,6 @@ def fetch_summaries_by_organization(organization):
 
 def decomposition_query_process(question, text_answers, chat_history, text_date, text_title):
     """Implements decomposition query"""
-
-    def output_parser(output):
-        """
-        Helps parses the LLM output, prints it, and returns it.
-        """
-        print("\n" + output.content + "\n")
-
-        return output.content
     
     def decompose_question(question, chat_history):
         """
@@ -251,12 +243,12 @@ def decomposition_query_process(question, text_answers, chat_history, text_date,
 
         return final_response
     
-    subquestions = decompose_question(question)
+    subquestions = decompose_question(question, chat_history)
     qa_pairs = generate_qa_pairs(subquestions, text_answers)
     print(qa_pairs)
     final_answer = build_final_answer(question, text_answers, chat_history, qa_pairs, text_date, text_title)
 
-    return output_parser(final_answer)
+    return final_answer.content
 
 def initialize_chat_history(user_id, session_id):
     """

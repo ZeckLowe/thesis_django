@@ -69,18 +69,47 @@ class prompt_templates:
 
     #     return ChatPromptTemplate.from_template(prompt)
 
+    # def decomposition_template():
+    #     prompt = ChatPromptTemplate.from_messages(
+    #         [
+    #             (
+    #                 "system",
+    #                 "Below is the conversation context, followed by prior related interactions and the user's current question."
+    #                 "Use the context and chat history to decide whether the current question consists of multiple parts or distinct sub-questions."
+    #                 "If the question is clearly a single, standalone query, do not decompose it and return the original query."
+    #                 "If the question contains multiple inquiries or distinct components, break it down into no more than three specific sub-questions for clarity."
+    #                 "Do not rephrase unknown terms. Focus on clarity and specificity."
+
+    #                 "Previous Chat History:"
+    #             ),
+    #             MessagesPlaceholder("chat_history"),
+    #             (
+    #                 "human",
+    #                 "Question: {question}"
+    #             ),
+    #             (
+    #                 "system",
+    #                 "Subquestions:"
+    #             )
+    #         ]
+    #     )
+
+    #     return prompt
+
     def decomposition_template():
         prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
-                    "Below is the conversation context, followed by prior related interactions and the user's current question."
-                    "Use the context and chat history to decide whether the current question consists of multiple parts or distinct sub-questions."
-                    "If the question is clearly a single, standalone query, do not decompose it and return the original query."
-                    "If the question contains multiple inquiries or distinct components, break it down into no more than three specific sub-questions for clarity."
-                    "Do not rephrase unknown terms. Focus on clarity and specificity."
-
-                    "Previous Chat History:"
+                    "Below is the conversation context, followed by prior related interactions and the user's current question. "
+                    "Analyze the conversation flow to determine which questions need to be addressed first. "
+                    "Pay special attention to follow-up questions as they often reference or build upon previous inquiries. "
+                    "Consider these factors when analyzing the current question and chat history:"
+                    "\n\n1. Recency - More recent questions generally take priority"
+                    "\n2. Explicit follow-ups - Direct follow-up questions should be linked to their parent questions"
+                    "\n3. Unanswered aspects - Identify parts of previous questions that weren't fully addressed"
+                    "\n4. Context shifts - Note when the user changes topic or direction"
+                    "\n\nPrevious Chat History:"
                 ),
                 MessagesPlaceholder("chat_history"),
                 (
@@ -89,11 +118,15 @@ class prompt_templates:
                 ),
                 (
                     "system",
-                    "Subquestions:"
+                    "First, identify if the current question is a follow-up to a previous question or a new line of inquiry. "
+                    "Then, determine if decomposition is needed:"
+                    "\n- If it's a simple follow-up that references a previous question, return both the parent question and the follow-up for context"
+                    "\n- If it's a complex question with multiple parts, decompose it into specific sub-questions (no more than three)"
+                    "\n- If it's a single, standalone query, return the original question"
+                    "\n\nOutput format: Return only the prioritized question(s) or sub-questions without explanations."
                 )
             ]
         )
-
         return prompt
     
     def qa_template():
@@ -115,8 +148,10 @@ class prompt_templates:
         prompt = """
             You are a meeting facilitator. The user's query was ambiguous for you to answer. Generate a follow up question to aid you to answer the user's query.
             Use the previous query and the list of recorded meeting titles and its summaries for context.
+            Give the list of meetings as a guide for the user to choose from.
+            Always keep your answer relevant, complete and concise, and in paragraph form. Do not use any font effects.
             Previous query: {question}
             Meeting list: {meeting_list}
             """
-        
+
         return ChatPromptTemplate.from_template(prompt)

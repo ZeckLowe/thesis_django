@@ -14,6 +14,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from sentence_transformers import CrossEncoder
 from collections import Counter
 from fuzzywuzzy import fuzz
+from langchain_core.prompts import PromptTemplate
 
 # Firestore Initialization
 #credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
@@ -73,59 +74,17 @@ def get_embeddings(text):
     print("Generating Embeddings: Done!")
     return text_embeddings
 
-def resolve_namespace(query, summaries, user_id, session_id):
+def resolve_namespace_with_llm(query, summaries, user_id, session_id):
     """
-    Resolves the namespace by selecting the most similar one using fuzzy matching (fuzzywuzzy).
+    Resolves the primary namespace using an LLM based on the query and summaries.
     """
-    # def ambiguous_fuzzy(query_embeddings, summaries):
-    #     """
-    #     Rank namespaces by semantic similarity to the query.
-    #     """   
-    #     # Compute similarity with meeting summaries
-    #     summary_embeddings = {title: get_embeddings(summary) for title, summary in summaries.items()}
-    #     print("Generated summary embeddings:", summary_embeddings)
-
-    #     summary_similarities = {
-    #         title: cosine_similarity([query_embeddings], [embedding])[0][0] for title, embedding in summary_embeddings.items()
-    #     }
-    #     print("Computed Summary Similarity:", summary_similarities)
-
-    #     # Rank by similarity
-    #     ranked_candidates = sorted(summary_similarities.items(), key=lambda x: x[1], reverse=True)
-    #     print("\n🔹 Initial Ranking (Cosine Similarity):", ranked_candidates)
-        
-    #     score_diff = ranked_candidates[0][1] - ranked_candidates[1][1]
-    #     print("Score difference:", score_diff)
-        
-    #     # Prepare input for re-ranking
-    #     cross_encoder_inputs = [(summaries[title], query) for title, _ in ranked_candidates]
-
-    #     # Compute cross-encoder scores
-    #     scores = reranker.predict(cross_encoder_inputs)
-
-    #     # Re-rank based on cross-encoder scores
-    #     reranked_candidates = sorted(zip(ranked_candidates, scores), key=lambda x: x[1], reverse=True)
-    #     print("\n🔹 Cross Encoder:", reranked_candidates)
-
-    #     score_diff = reranked_candidates[0][1] - reranked_candidates[1][1]
-    #     print("Score difference:", score_diff)
-
-    #     if score_diff < 0.9:
-    #         print("Ambiguous in Cross Encoder")
-    #         return ""
-
-    #     print("\n🔹 Re-ranked Candidates (Cross-Encoder):", reranked_candidates)
-        
-    #     return reranked_candidates[0][0][0]
     def store_primary_namespace(user_id, session_id, primary_namespace):
         """
         Store the primary namespace in Firestore.
         """
         doc_ref = db.collection("chatHistory").document(user_id).collection("session").document(session_id)
         try:
-            doc_ref.update({
-                'primary_namespace': primary_namespace
-            })
+            doc_ref.update({'primary_namespace': primary_namespace})
         except Exception as e:
             print(f"Error updating chat history: {str(e)}")
         print(f"Stored primary namespace '{primary_namespace}' for user_id={user_id}, session_id={session_id}")
@@ -140,45 +99,48 @@ def resolve_namespace(query, summaries, user_id, session_id):
             if doc_snapshot.exists:
                 primary_namespace = doc_snapshot.get('primary_namespace')
                 if primary_namespace is None:
-                    print(f"No 'namespace' field found in document for user_id={user_id}, session_id={session_id}")
+                    print(f"No 'primary_namespace' field found.")
                     return ""
-
                 print(f"Primary Namespace Initialized: {primary_namespace}")
             else:
                 print(f"No document found for user_id={user_id}, session_id={session_id}")
         except Exception as e:
-            print(f"Error initializing namespace: {str(e)}")
+            print(f"Error initializing chat history: {str(e)}")
         
         return primary_namespace
 
-    def get_most_similar_namespace(query, summaries, user_id, session_id):
+    def get_namespace_from_llm(query, summaries):
         """
-        Rank namespaces by fuzzy matching (using fuzzywuzzy's token_set_ratio).
+        Use LLM to select the most relevant namespace or return an empty string if none match.
         """
-        similarities = {
-            title: (fuzz.token_set_ratio(query.lower(), f"{title}".lower()) + fuzz.token_set_ratio(query.lower(), f"{summary}".lower()))/2
-            for title, summary in summaries.items()
-        }
+        namespace_list = list(summaries.keys())
 
-        print("Computed fuzzy similarities:", similarities)
+        prompt = PromptTemplate.from_template(
+                "You are tasked to help select the best matching namespace for a user's query. Be strict when the namespace or its context is mentione.\n\n"
+                "User Query: {query}\n\n"
+                "Here are the available namespaces and their summaries:\n"
+                "{namespace_list}\n\n"
+                "{summaries}\n\n"
+                "Instructions:\n"
+                "- Choose the namespace (title) that best matches the user's query.\n"
+                "- If none of the namespaces seem relevant, respond with ONLY an empty string ('').\n"
+                "- Return ONLY the namespace title (no explanation, no extra text).\n"
+        )
 
-        # Rank namespaces based on similarity score
-        ranked_namespaces = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
-        print("Ranked namespaces:", ranked_namespaces)
+        # Format summaries nicely
+        formatted_summaries = "\n".join([f"- {title}: {summary}" for title, summary in summaries.items()])
+        prompt = prompt.format(query=query, summaries=formatted_summaries, namespace_list=namespace_list)
+        response = LLM.invoke(prompt)
+        return response.content
 
-        # Check for ambiguity
-        if len(ranked_namespaces) > 1:
-            diff = ranked_namespaces[0][1] - ranked_namespaces[1][1]
-            if diff < 15:
-                print("Ambiguous fuzzy match.")
-                return ""
-            
-        store_primary_namespace(user_id, session_id, ranked_namespaces[0][0])
-        return ranked_namespaces[0][0] if ranked_namespaces else ""
-
+    # Start
     primary_namespace = get_primary_namespace(user_id, session_id)
     if primary_namespace == "":
-        primary_namespace = get_most_similar_namespace(query, summaries, user_id, session_id)
+        selected_namespace = get_namespace_from_llm(query, summaries)
+        if selected_namespace:
+            store_primary_namespace(user_id, session_id, selected_namespace)
+        primary_namespace = selected_namespace
+
     print(f"Selected namespace: {primary_namespace}")
     return primary_namespace
 

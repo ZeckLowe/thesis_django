@@ -22,7 +22,7 @@ PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 
 # Pinecone Initialization
 pc = Pinecone(api_key=PINECONE_API_KEY)
-index = pc.Index("echo-openai")
+# index = pc.Index("echo-openai")
 
 # OpenAI Initialization
 client=OpenAI(api_key=OPENAI_API_KEY)

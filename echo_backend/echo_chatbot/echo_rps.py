@@ -12,14 +12,14 @@ import firebase_admin
 
 
 # Firestore Initialization
-# credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
-credential_path = "/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json"
+credential_path = r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json'
+# credential_path = "/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json"
 
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 
 if not firebase_admin._apps:
-    # cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
-    cred = credentials.Certificate("/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json")
+    cred = credentials.Certificate(r'C:\Users\user\OneDrive\Desktop\thesis_django\echo_backend\echo_chatbot\ServiceAccountKey.json')
+    # cred = credentials.Certificate("/root/thesis_django/echo_backend/echo_chatbot/ServiceAccountKey.json")
     firebase_admin.initialize_app(cred)
 
 db = firestore.Client()
@@ -182,7 +182,7 @@ def upsert_data_to_pinecone(data_with_metadata, namespace, index):
     time.sleep(2)
     print("Upserting vectors to Pinecone: Done!")
 
-def store_summary_to_firestore(summary, organization, meeting_title):
+def store_summary_to_firestore(summary, meeting_title):
     """
     Store the summary and its embeddings to Firestore.
     
@@ -225,5 +225,5 @@ def PINECONE(texts, meeting_title, organization):
     chunked_text_embeddings = generate_embeddings(texts=chunked_text)
     data_with_meta_data = combine_vector_and_text(texts=chunked_text, meeting_title=meeting_title,  text_embeddings=chunked_text_embeddings)
     upsert_data_to_pinecone(data_with_metadata=data_with_meta_data, namespace=namespace, index=index)
-    store_summary_to_firestore(meeting_title=meeting_title, organization=organization, summary=generate_summary(texts=texts, meeting_title=meeting_title, date=today))
+    store_summary_to_firestore(meeting_title=meeting_title, summary=generate_summary(texts=texts, meeting_title=meeting_title, date=today))
 

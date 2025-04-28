@@ -133,7 +133,7 @@ def extract_name(introduction):
     """Extract speaker name from an introduction phrase."""
     patterns = [
         r"(?:my name is|i am|this is|i'm|name's) ([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)?)",
-        r"([A-Z][a-zA-Z]+(?:\s[A-Z][a-Z]+)?)\s+(?:here|speaking)",
+        r"([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)?)\s+(?:here|speaking)",
     ]
     
     introduction = clean_text(introduction.lower())
@@ -300,7 +300,7 @@ def transcribe_audio_file(audio_file_path):
         introduction_phase = True
         min_segment_length = settings.MIN_SEGMENT_LENGTH
         ignore_seconds = settings.IGNORE_FIRST_SECONDS
-        INTRODUCTION_PHASE_MAX_TIME = 0
+        INTRODUCTION_PHASE_MAX_TIME = 20
 
         # Debug the output structure of diarization
         first_track = next(diarization.itertracks(yield_label=True), None)
